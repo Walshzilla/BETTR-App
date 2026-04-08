@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZILLA</title>
+<style>
+  /* Reset & basic styles */
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+  body { background: linear-gradient(to bottom, #a3d9ff, #ffffff); display: flex; justify-content: center; align-items: center; height: 100vh; }
+  
+  /* Container */
+  #zilla-container { text-align: center; max-width: 600px; padding: 20px; background: #fff8dc; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+
+  /* Title */
+  h1 { font-size: 3rem; color: #0077b6; margin-bottom: 20px; }
+
+  /* Godzilla Image */
+  #zilla-image { width: 200px; transition: transform 0.3s ease; }
+  #zilla-image:hover { transform: scale(1.1) rotate(5deg); }
+
+  /* Buttons */
+  .zilla-btn { background: #0077b6; color: white; padding: 15px 30px; margin: 10px; border: none; border-radius: 10px; cursor: pointer; font-size: 1.2rem; transition: background 0.2s; }
+  .zilla-btn:hover { background: #0096c7; }
+
+  /* Layout sections */
+  .layout { display: none; margin-top: 20px; }
+  .active { display: block; }
+
+  /* Caveman instructions */
+  #instructions { font-size: 1rem; color: #333; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div id="zilla-container">
+  <h1>ZILLA</h1>
+  <img id="zilla-image" src="https://i.imgur.com/q2Qy5F9.png" alt="Lovable Godzilla in Car with Shades">
+  
+  <div>
+    <button class="zilla-btn" onclick="showLayout('welcome')">Welcome</button>
+    <button class="zilla-btn" onclick="showLayout('play')">Play</button>
+    <button class="zilla-btn" onclick="showLayout('about')">About</button>
+  </div>
+
+  <div id="welcome" class="layout active">
+    <h2>Welcome to ZILLA!</h2>
+    <p>One app to rule them all. 🦖💥</p>
+  </div>
+
+  <div id="play" class="layout">
+    <h2>Play Mode</h2>
+    <p>Click Godzilla, have fun, smash some bugs! 😎</p>
+    <button class="zilla-btn" onclick="smash()">Smash!</button>
+  </div>
+
+  <div id="about" class="layout">
+    <h2>About ZILLA</h2>
+    <p>Created by Tarzan & Skynet with love ❤️</p>
+  </div>
+
+  <div id="instructions">
+    Caveman simple: click buttons, see layouts, click Godzilla to smash. One copy-pasta, done.
+  </div>
+</div>
+
+<script>
+  function showLayout(layoutId) {
+    document.querySelectorAll('.layout').forEach(l => l.classList.remove('active'));
+    document.getElementById(layoutId).classList.add('active');
+  }
+
+  function smash() {
+    const img = document.getElementById('zilla-image');
+    img.style.transform = 'scale(1.3) rotate(-10deg)';
+    setTimeout(() => { img.style.transform = 'scale(1) rotate(0deg)'; }, 500);
+    alert('Godzilla smashed it! 💥');
+  }
+</script>
+</body>
+</html>
