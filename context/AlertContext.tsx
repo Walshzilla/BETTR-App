@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AlertType } from "@/constants/colors";
 
-const STORAGE_KEY = "@bettr_alerts";
+const STORAGE_KEY = "@bettr_alerts_v2";
 
 export interface Alert {
   id: string;
@@ -10,19 +10,27 @@ export interface Alert {
   latitude: number;
   longitude: number;
   timestamp: number;
-  reportCount: number;
+  confirms: number;
+  dismissals: number;
 }
 
 interface AlertContextValue {
   alerts: Alert[];
   addAlert: (type: AlertType, latitude: number, longitude: number) => void;
-  upvoteAlert: (id: string) => void;
-  clearOldAlerts: () => void;
+  confirmAlert: (id: string) => void;
+  dismissAlert: (id: string) => void;
 }
 
 const AlertContext = createContext<AlertContextValue | null>(null);
 
 const ALERT_EXPIRY_MS = 2 * 60 * 60 * 1000;
+
+function isActive(alert: Alert): boolean {
+  const age = Date.now() - alert.timestamp;
+  if (age > ALERT_EXPIRY_MS) return false;
+  if (alert.dismissals > 0 && alert.dismissals > alert.confirms) return false;
+  return true;
+}
 
 export function AlertProvider({ children }: { children: React.ReactNode }) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -32,16 +40,16 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
       if (raw) {
         try {
           const parsed: Alert[] = JSON.parse(raw);
-          const now = Date.now();
-          setAlerts(parsed.filter((a) => now - a.timestamp < ALERT_EXPIRY_MS));
+          setAlerts(parsed.filter(isActive));
         } catch {}
       }
     });
   }, []);
 
   const save = useCallback((updated: Alert[]) => {
-    setAlerts(updated);
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    const active = updated.filter(isActive);
+    setAlerts(active);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(active));
   }, []);
 
   const addAlert = useCallback(
@@ -52,27 +60,30 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
         latitude,
         longitude,
         timestamp: Date.now(),
-        reportCount: 1,
+        confirms: 1,
+        dismissals: 0,
       };
       save([newAlert, ...alerts]);
     },
     [alerts, save]
   );
 
-  const upvoteAlert = useCallback(
+  const confirmAlert = useCallback(
     (id: string) => {
-      save(alerts.map((a) => (a.id === id ? { ...a, reportCount: a.reportCount + 1 } : a)));
+      save(alerts.map((a) => (a.id === id ? { ...a, confirms: a.confirms + 1 } : a)));
     },
     [alerts, save]
   );
 
-  const clearOldAlerts = useCallback(() => {
-    const now = Date.now();
-    save(alerts.filter((a) => now - a.timestamp < ALERT_EXPIRY_MS));
-  }, [alerts, save]);
+  const dismissAlert = useCallback(
+    (id: string) => {
+      save(alerts.map((a) => (a.id === id ? { ...a, dismissals: a.dismissals + 1 } : a)));
+    },
+    [alerts, save]
+  );
 
   return (
-    <AlertContext.Provider value={{ alerts, addAlert, upvoteAlert, clearOldAlerts }}>
+    <AlertContext.Provider value={{ alerts, addAlert, confirmAlert, dismissAlert }}>
       {children}
     </AlertContext.Provider>
   );
