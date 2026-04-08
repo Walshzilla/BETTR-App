@@ -4,7 +4,7 @@ import * as Location from "expo-location";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Platform,
+  Alert as RNAlert,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,11 +21,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AlertBanner } from "@/components/AlertBanner";
 import { ReportSheet } from "@/components/ReportSheet";
+import { Speedometer } from "@/components/Speedometer";
 import { ALERT_TYPE_CONFIG, AlertType } from "@/constants/colors";
 import { Alert, useAlerts } from "@/context/AlertContext";
 import { useColors } from "@/hooks/useColors";
 
 const PROXIMITY_THRESHOLD = 600;
+const DEFAULT_SPEED_LIMIT = 80;
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -46,10 +48,19 @@ function timeAgo(timestamp: number): string {
   return `${Math.floor(mins / 60)}h ago`;
 }
 
+function reliabilityLabel(confirms: number, dismissals: number): { label: string; color: string } {
+  const total = confirms + dismissals;
+  if (total < 2) return { label: "Unverified", color: "#8A8AB0" };
+  const ratio = confirms / total;
+  if (ratio >= 0.75) return { label: "Confirmed", color: "#34C759" };
+  if (ratio >= 0.5) return { label: "Likely", color: "#FF9500" };
+  return { label: "Disputed", color: "#FF3B30" };
+}
+
 export default function MapScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { alerts, addAlert, upvoteAlert } = useAlerts();
+  const { alerts, addAlert, confirmAlert, dismissAlert } = useAlerts();
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [permError, setPermError] = useState(false);
   const [nearbyAlert, setNearbyAlert] = useState<Alert | null>(null);
@@ -57,6 +68,8 @@ export default function MapScreen() {
   const [dismissedId, setDismissedId] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [showTraffic, setShowTraffic] = useState(true);
+  const [speedLimitKph, setSpeedLimitKph] = useState(DEFAULT_SPEED_LIMIT);
   const mapRef = useRef<MapView>(null);
   const listHeight = useSharedValue(0);
 
@@ -68,7 +81,7 @@ export default function MapScreen() {
         return;
       }
       const sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 10 },
+        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
         (loc) => setLocation(loc)
       );
       return () => sub.remove();
@@ -115,9 +128,25 @@ export default function MapScreen() {
   }, [location]);
 
   const toggleList = () => {
-    setListOpen((v) => !v);
-    listHeight.value = withSpring(listOpen ? 0 : 260, { damping: 18 });
+    const next = !listOpen;
+    setListOpen(next);
+    listHeight.value = withSpring(next ? 280 : 0, { damping: 18 });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleSetSpeedLimit = () => {
+    const options = [60, 80, 100, 110, 120];
+    RNAlert.alert(
+      "Speed Alert Threshold",
+      "Alert me when I exceed:",
+      [
+        ...options.map((v) => ({
+          text: `${v} km/h`,
+          onPress: () => setSpeedLimitKph(v),
+        })),
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
   };
 
   const listStyle = useAnimatedStyle(() => ({ height: listHeight.value }));
@@ -131,6 +160,7 @@ export default function MapScreen() {
         provider={PROVIDER_DEFAULT}
         showsUserLocation
         showsMyLocationButton={false}
+        showsTraffic={showTraffic}
         mapType="standard"
         customMapStyle={darkMapStyle}
         initialRegion={{
@@ -142,13 +172,13 @@ export default function MapScreen() {
       >
         {alerts.map((alert) => {
           const config = ALERT_TYPE_CONFIG[alert.type];
+          const rel = reliabilityLabel(alert.confirms, alert.dismissals);
           return (
             <Marker
               key={alert.id}
               coordinate={{ latitude: alert.latitude, longitude: alert.longitude }}
-              onPress={() => upvoteAlert(alert.id)}
             >
-              <View style={[styles.markerWrap, { backgroundColor: config.color }]}>
+              <View style={[styles.markerWrap, { backgroundColor: config.color, opacity: rel.label === "Disputed" ? 0.5 : 1 }]}>
                 <Feather name={config.icon} size={14} color="#FFFFFF" />
               </View>
             </Marker>
@@ -172,19 +202,37 @@ export default function MapScreen() {
         </View>
       )}
 
-      <TouchableOpacity
-        style={[
-          styles.centerBtn,
-          { right: 16, bottom: 200 + insets.bottom, backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-        onPress={centerOnUser}
-        activeOpacity={0.8}
-      >
-        <Feather name="navigation" size={20} color={colors.primary} />
-      </TouchableOpacity>
+      <View style={[styles.topControls, { top: bannerTop + (nearbyAlert ? 72 : 0) }]}>
+        <Speedometer
+          speedMs={location?.coords.speed ?? null}
+          limitKph={speedLimitKph}
+          onPressLimit={handleSetSpeedLimit}
+        />
+      </View>
+
+      <View style={[styles.sideControls, { right: 16, bottom: 220 + insets.bottom }]}>
+        <TouchableOpacity
+          style={[styles.iconBtn, { backgroundColor: showTraffic ? colors.primary : colors.card, borderColor: colors.border }]}
+          onPress={() => {
+            setShowTraffic((v) => !v);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          activeOpacity={0.8}
+        >
+          <Feather name="activity" size={18} color={showTraffic ? "#FFFFFF" : colors.mutedForeground} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={centerOnUser}
+          activeOpacity={0.8}
+        >
+          <Feather name="navigation" size={18} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
 
       <LinearGradient
-        colors={["transparent", "rgba(13,13,20,0.95)"]}
+        colors={["transparent", "rgba(13,13,20,0.97)"]}
         style={[styles.bottomGradient, { paddingBottom: insets.bottom + 16 }]}
       >
         <Animated.View style={[styles.listContainer, listStyle]}>
@@ -193,29 +241,49 @@ export default function MapScreen() {
             contentContainerStyle={{ paddingBottom: 8, gap: 8 }}
           >
             {alerts.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No alerts nearby</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                No active alerts — be the first to report
+              </Text>
             ) : (
               alerts.map((alert) => {
                 const config = ALERT_TYPE_CONFIG[alert.type];
+                const rel = reliabilityLabel(alert.confirms, alert.dismissals);
                 return (
-                  <TouchableOpacity
+                  <View
                     key={alert.id}
                     style={[styles.alertRow, { backgroundColor: colors.card, borderColor: config.color + "40" }]}
-                    onPress={() => upvoteAlert(alert.id)}
-                    activeOpacity={0.8}
                   >
                     <View style={[styles.alertRowIcon, { backgroundColor: config.color + "22" }]}>
                       <Feather name={config.icon} size={16} color={config.color} />
                     </View>
                     <View style={styles.alertRowText}>
                       <Text style={[styles.alertRowTitle, { color: colors.foreground }]}>{config.label}</Text>
-                      <Text style={[styles.alertRowSub, { color: colors.mutedForeground }]}>{timeAgo(alert.timestamp)}</Text>
+                      <View style={styles.alertRowMeta}>
+                        <Text style={[styles.alertRowSub, { color: colors.mutedForeground }]}>{timeAgo(alert.timestamp)}</Text>
+                        <View style={[styles.relBadge, { backgroundColor: rel.color + "22" }]}>
+                          <Text style={[styles.relText, { color: rel.color }]}>{rel.label}</Text>
+                        </View>
+                      </View>
                     </View>
-                    <View style={styles.alertRowVote}>
-                      <Feather name="thumbs-up" size={13} color={colors.mutedForeground} />
-                      <Text style={[styles.alertRowCount, { color: colors.mutedForeground }]}>{alert.reportCount}</Text>
+                    <View style={styles.voteRow}>
+                      <TouchableOpacity
+                        style={[styles.voteBtn, { backgroundColor: "#34C75922" }]}
+                        onPress={() => { confirmAlert(alert.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+                      >
+                        <Feather name="check" size={14} color="#34C759" />
+                        <Text style={[styles.voteTxt, { color: "#34C759" }]}>{alert.confirms}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.voteBtn, { backgroundColor: "#FF3B3022" }]}
+                        onPress={() => { dismissAlert(alert.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+                      >
+                        <Feather name="x" size={14} color="#FF3B30" />
+                        <Text style={[styles.voteTxt, { color: "#FF3B30" }]}>{alert.dismissals}</Text>
+                      </TouchableOpacity>
                     </View>
-                  </TouchableOpacity>
+                  </View>
                 );
               })
             )}
@@ -281,9 +349,18 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10,
   },
   permText: { color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  centerBtn: {
-    position: "absolute", width: 44, height: 44, borderRadius: 22,
-    alignItems: "center", justifyContent: "center", borderWidth: 1,
+  topControls: {
+    position: "absolute",
+    left: 16,
+  },
+  sideControls: {
+    position: "absolute",
+    gap: 10,
+  },
+  iconBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
   },
@@ -312,7 +389,14 @@ const styles = StyleSheet.create({
   alertRowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   alertRowText: { flex: 1 },
   alertRowTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  alertRowSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
-  alertRowVote: { flexDirection: "row", alignItems: "center", gap: 4 },
-  alertRowCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  alertRowMeta: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  alertRowSub: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  relBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  relText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  voteRow: { flexDirection: "row", gap: 6 },
+  voteBtn: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10,
+  },
+  voteTxt: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 });
