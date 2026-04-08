@@ -1,0 +1,16 @@
+// Mini BETTR GPS simulator/test harness
+export default function useGPSMock(updateLocation) {
+  const path = [
+    { latitude: 42.376, longitude: -71.033 },
+    { latitude: 42.377, longitude: -71.034 },
+    { latitude: 42.378, longitude: -71.035 },
+  ];
+  let index = 0;
+  
+  return () => {
+    const coord = path[index];
+    index = (index + 1) % path.length;
+    updateLocation(coord);
+    console.log('Simulated GPS:', coord);
+  };
+}
