@@ -1,0 +1,137 @@
+/* 
+💥 BETTR App - Caveman Persistent Edition 💥
+Instructions (Caveman mode):
+
+1️⃣ Copy ALL this code.
+2️⃣ Paste in Replit or GitHub (Node.js environment).
+3️⃣ Make sure Node.js can write files (Replit: works by default).
+4️⃣ Hit RUN (Replit) or `node index.js`.
+5️⃣ Open browser at http://localhost:3000
+6️⃣ Add/remove tasks. They stay saved. Done.
+*/
+
+const express = require("express");
+const bodyParser = require("body-parser");
+const fs = require("fs");
+const path = require("path");
+const app = express();
+const PORT = 3000;
+
+// --- Persistent Storage ---
+const DATA_FILE = path.join(__dirname, "tasks.json");
+
+let tasks = [];
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    tasks = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  } catch (e) {
+    console.log("Error reading tasks.json, starting fresh.");
+    tasks = [];
+  }
+}
+
+// --- Helper to save tasks ---
+function saveTasks() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(tasks, null, 2));
+}
+
+// --- Middleware ---
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
+// --- Serve front-end ---
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>BETTR Persistent App</title>
+      <style>
+        body { font-family: sans-serif; margin: 50px; background: #e0ffe0; }
+        h1 { color: #27ae60; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 5px 0; }
+        button { margin-left: 10px; }
+      </style>
+    </head>
+    <body>
+      <h1>BETTR Persistent App</h1>
+      <input id="taskInput" placeholder="New task..." />
+      <button onclick="addTask()">Add Task</button>
+      <ul id="tasksList"></ul>
+
+      <script>
+        async function loadTasks() {
+          const res = await fetch('/tasks');
+          const data = await res.json();
+          const ul = document.getElementById('tasksList');
+          ul.innerHTML = '';
+          data.forEach(task => {
+            const li = document.createElement('li');
+            li.innerHTML = \`
+              \${task.done ? '<s>' + task.text + '</s>' : task.text}
+              <button onclick="toggleDone(\${task.id})">\${task.done ? 'Undo' : 'Done'}</button>
+              <button onclick="removeTask(\${task.id})">Remove</button>
+            \`;
+            ul.appendChild(li);
+          });
+        }
+
+        async function addTask() {
+          const input = document.getElementById('taskInput');
+          if(input.value.trim() === '') return alert('Caveman add task text!');
+          await fetch('/tasks', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ text: input.value })
+          });
+          input.value = '';
+          loadTasks();
+        }
+
+        async function removeTask(id) {
+          await fetch('/tasks/' + id, { method: 'DELETE' });
+          loadTasks();
+        }
+
+        async function toggleDone(id) {
+          await fetch('/tasks/' + id + '/toggle', { method: 'PUT' });
+          loadTasks();
+        }
+
+        loadTasks();
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// --- API routes ---
+app.get("/tasks", (req, res) => res.json(tasks));
+
+app.post("/tasks", (req, res) => {
+  const { text } = req.body;
+  const id = tasks.length ? tasks[tasks.length - 1].id + 1 : 1;
+  tasks.push({ id, text, done: false });
+  saveTasks();
+  res.json({ status: 'ok' });
+});
+
+app.delete("/tasks/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  tasks = tasks.filter(t => t.id !== id);
+  saveTasks();
+  res.json({ status: 'ok' });
+});
+
+app.put("/tasks/:id/toggle", (req, res) => {
+  const id = parseInt(req.params.id);
+  tasks = tasks.map(t => t.id === id ? { ...t, done: !t.done } : t);
+  saveTasks();
+  res.json({ status: 'ok' });
+});
+
+// --- Start server ---
+app.listen(PORT, () => {
+  console.log(`BETTR Persistent App running at http://localhost:${PORT}`);
+});
