@@ -1,0 +1,18 @@
+#!/bin/bash
+# One-command BETTR GPS code update for GitHub
+
+# Go to project folder (change path if needed)
+cd /path/to/BETTR-App || exit
+
+# Make sure remote exists
+git remote get-url origin >/dev/null 2>&1 || git remote add origin https://github.com/Walshzilla/BETTR-App.git
+
+# Stage & commit changes
+git add .
+git commit -m "Updated BETTR GPS code" || echo "Nothing to commit, all up to date"
+
+# Push to GitHub main branch
+git branch -M main
+git push -u origin main
+
+echo "✅ BETTR GPS code updated on GitHub. No more repo tantrums."
