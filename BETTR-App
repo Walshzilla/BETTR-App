@@ -1,0 +1,56 @@
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+
+  map: { flex: 1 },
+
+  searchBox: {
+    position: "absolute",
+    top: 60,
+    left: 15,
+    right: 15,
+    flexDirection: "row",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    alignItems: "center",
+    elevation: 6,
+  },
+
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: "#222",
+  },
+
+  goButton: {
+    marginLeft: 10,
+    backgroundColor: "#1E1E1E",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+
+  goText: {
+    color: "#fff",
+    fontSize: 14,
+  },
+
+  startButton: {
+    position: "absolute",
+    bottom: 40,
+    left: 20,
+    right: 20,
+    backgroundColor: "#1E1E1E",
+    padding: 18,
+    borderRadius: 30,
+    alignItems: "center",
+    elevation: 8,
+  },
+
+  startText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+});
